@@ -1,29 +1,66 @@
-<thead>
-    <tr>
-        <th>Fecha</th>
-        <th>Nombre</th>
-        <th>Carta Revelada</th> <th>Ubicación</th>
-        <th>WhatsApp</th>
-        <th>Acción</th>
-    </tr>
-</thead>
-<tbody id="lista"></tbody>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin - Arcanos Grado 33</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #d4af37; padding: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #222; }
+        th, td { padding: 12px; border: 1px solid #d4af37; text-align: left; color: white; }
+        th { background: #d4af37; color: black; }
+        .btn-wa { background: #25d366; color: white; padding: 5px 10px; text-decoration: none; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>📋 Consultantes Registrados</h1>
+    <div id="status">Cargando datos...</div>
+    <table id="tabla" style="display:none;">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>WhatsApp</th>
+                <th>Ubicación</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+        <tbody id="lista"></tbody>
+    </table>
 
-<script>
-// En la función cargarUsuarios, actualiza el mapa:
-lista.innerHTML = datos.map(u => `
-    <tr>
-        <td>${u.fecha_registro}</td>
-        <td>${u.nombre}</td>
-        <td style="font-weight:bold; color:#d4af37">${u.carta_revelada || 'N/A'}</td>
-        <td>${u.ubicacion}</td>
-        <td>${u.whatsapp}</td>
-        <td>
-            <a href="https://wa.me/${u.whatsapp.replace(/\D/g,'')}?text=Hola ${u.nombre}, soy el médium de Arcanos Grado 33. Veo que te salió la carta de ${u.carta_revelada}..." 
-               target="_blank" class="btn-wa">
-               MENSAJE 📱
-            </a>
-        </td>
-    </tr>
-`).join('');
-</script>
+    <script>
+        async function cargar() {
+            const params = new URLSearchParams(window.location.search);
+            const token = params.get("token");
+
+            if (!token) {
+                document.getElementById('status').innerText = "Acceso denegado. Se requiere ?token=...";
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/admin/usuarios?token=${token}`);
+                const datos = await res.json();
+                
+                const lista = document.getElementById('lista');
+                lista.innerHTML = datos.map(u => `
+                    <tr>
+                        <td>${u.id}</td>
+                        <td>${u.nombre}</td>
+                        <td>${u.whatsapp}</td>
+                        <td>${u.ubicacion}</td>
+                        <td>
+                            <a href="https://wa.me/${u.whatsapp.replace(/\D/g,'')}" target="_blank" class="btn-wa">WhatsApp</a>
+                        </td>
+                    </tr>
+                `).join('');
+                
+                document.getElementById('status').style.display = 'none';
+                document.getElementById('tabla').style.display = 'table';
+            } catch (e) {
+                document.getElementById('status').innerText = "Error al cargar usuarios.";
+            }
+        }
+        cargar();
+    </script>
+</body>
+</html>
