@@ -1,104 +1,80 @@
-/**
- * LLM Chat Application Template
- *
- * A simple chat application using Cloudflare Workers AI.
- * This template demonstrates how to implement an LLM-powered chat interface with
- * streaming responses using Server-Sent Events (SSE).
- *
- * @license MIT
- */
-import { Env, ChatMessage } from "./types";
-
-// Model ID for Workers AI model
-// https://developers.cloudflare.com/workers-ai/models/
-const MODEL_ID = "@cf/meta/llama-3.1-8b-instruct-fp8";
-
-// Default system prompt
-const SYSTEM_PROMPT =
-	"You are a helpful, friendly assistant. Provide concise and accurate responses.";
+export interface Env {
+  AI: any;
+  DB: D1Database;
+}
 
 export default {
-	/**
-	 * Main request handler for the Worker
-	 */
-	async fetch(
-		request: Request,
-		env: Env,
-		ctx: ExecutionContext,
-	): Promise<Response> {
-		const url = new URL(request.url);
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
 
-		// Handle static assets (frontend)
-		if (url.pathname === "/" || !url.pathname.startsWith("/api/")) {
-			return env.ASSETS.fetch(request);
-		}
+    // Endpoint para la consulta
+    if (url.pathname === "/api/consultar" && request.method === "POST") {
+      try {
+        const { nombre, whatsapp, ubicacion } = await request.json();
 
-		// API Routes
-		if (url.pathname === "/api/chat") {
-			// Handle POST requests for chat
-			if (request.method === "POST") {
-				return handleChatRequest(request, env);
-			}
+        // 1. Lógica para elegir 1 de las 78 cartas
+        const totalCartas = 78;
+        const indiceAleatorio = Math.floor(Math.random() * totalCartas) + 1;
+        let cardId: string;
 
-			// Method not allowed for other request types
-			return new Response("Method not allowed", { status: 405 });
-		}
+        if (indiceAleatorio <= 22) {
+          cardId = indiceAleatorio.toString().padStart(2, '0'); // Mayores (01-22)
+        } else if (indiceAleatorio <= 36) {
+          cardId = 'B' + (indiceAleatorio - 22).toString().padStart(2, '0'); // Bastos (B01-B14)
+        } else if (indiceAleatorio <= 50) {
+          cardId = 'C' + (indiceAleatorio - 36).toString().padStart(2, '0'); // Copas (C01-C14)
+        } else if (indiceAleatorio <= 64) {
+          cardId = 'E' + (indiceAleatorio - 50).toString().padStart(2, '0'); // Espadas (E01-E14)
+        } else {
+          cardId = 'O' + (indiceAleatorio - 64).toString().padStart(2, '0'); // Oros (O01-O14)
+        }
 
-		// Handle 404 for unmatched routes
-		return new Response("Not found", { status: 404 });
-	},
-} satisfies ExportedHandler<Env>;
+        // 2. Buscar la carta en la base de datos D1
+        const carta = await env.DB.prepare("SELECT * FROM arcanos WHERE id = ?").bind(cardId).first();
+        
+        if (!carta) {
+          return new Response("Error: Carta no encontrada", { status: 404 });
+        }
 
-/**
- * Handles chat API requests
- */
-async function handleChatRequest(
-	request: Request,
-	env: Env,
-): Promise<Response> {
-	try {
-		// Parse JSON request body
-		const { messages = [] } = (await request.json()) as {
-			messages: ChatMessage[];
-		};
+        // 3. Guardar al usuario en la tabla 'usuarios'
+        const userInsert = await env.DB.prepare(
+          "INSERT INTO usuarios (nombre, whatsapp, ubicacion) VALUES (?, ?, ?) RETURNING id"
+        ).bind(nombre, whatsapp, ubicacion).first();
 
-		// Add system prompt if not present
-		if (!messages.some((msg) => msg.role === "system")) {
-			messages.unshift({ role: "system", content: SYSTEM_PROMPT });
-		}
+        // 4. Generar el informe con la IA (Llama 3)
+        const promptMistico = `
+          Actúa como un Gran Médium del Tarot Grado 33. 
+          El consultante se llama ${nombre} y está en ${ubicacion}.
+          Ha salido la carta: "${carta.nombre}".
+          Significado clave: ${carta.palabras_clave}.
+          Esencia mística: ${carta.descripcion_mistica}.
+          Genera una lectura espiritual profunda, directa y reveladora sobre su presente y futuro.
+        `;
 
-		const stream = await env.AI.run(
-			MODEL_ID,
-			{
-				messages,
-				max_tokens: 1024,
-				stream: true,
-			},
-			{
-				// Uncomment to use AI Gateway
-				// gateway: {
-				//   id: "YOUR_GATEWAY_ID", // Replace with your AI Gateway ID
-				//   skipCache: false,      // Set to true to bypass cache
-				//   cacheTtl: 3600,        // Cache time-to-live in seconds
-				// },
-			},
-		);
+        const aiResponse = await env.AI.run("@cf/meta/llama-3-8b-instruct", {
+          messages: [
+            { role: "system", content: "Eres un experto místico del Tarot Grado 33." },
+            { role: "user", content: promptMistico }
+          ]
+        });
 
-		return new Response(stream, {
-			headers: {
-				"content-type": "text/event-stream; charset=utf-8",
-				"cache-control": "no-cache",
-				connection: "keep-alive",
-			},
-		});
-	} catch (error) {
-		console.error("Error processing chat request:", error);
-		return new Response(
-			JSON.stringify({ error: "Failed to process request" }),
-			{
-				status: 500,
-				headers: { "content-type": "application/json" },
-			},
-		);
-	}
-}
+        // 5. Registrar la lectura
+        await env.DB.prepare(
+          "INSERT INTO lecturas (usuario_id, arcano_id, mensaje_ia) VALUES (?, ?, ?)"
+        ).bind(userInsert.id, cardId, aiResponse.response).run();
+
+        // Enviar respuesta al Front-end
+        return new Response(JSON.stringify({
+          nombreCarta: carta.nombre,
+          imagen: `/images/${carta.nombre_archivo}`,
+          informe: aiResponse.response
+        }), { headers: { "Content-Type": "application/json" } });
+
+      } catch (err) {
+        return new Response("Error en el servidor: " + err.message, { status: 500 });
+      }
+    }
+
+    return new Response("Ruta no encontrada", { status: 404 });
+  }
+};
