@@ -1,183 +1,122 @@
-<!doctype html>
-<html lang="en">
-	<head>
-		<meta charset="UTF-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>LLM Chat App</title>
-		<style>
-			:root {
-				--primary-color: #f6821f;
-				--primary-hover: #e67e22;
-				--light-bg: #f9fafb;
-				--border-color: #e5e7eb;
-				--text-color: #1f2937;
-				--text-light: #6b7280;
-				--user-msg-bg: #fff2e6;
-				--assistant-msg-bg: #f3f4f6;
-			}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arcanos Grado 33 - Médium IA</title>
+    <style>
+        :root {
+            --gold: #d4af37;
+            --dark-purple: #1a0f1f;
+            --mystic-white: #e0d7e5;
+        }
 
-			* {
-				box-sizing: border-box;
-				margin: 0;
-				padding: 0;
-			}
+        body {
+            background-color: var(--dark-purple);
+            color: var(--mystic-white);
+            font-family: 'Georgia', serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
 
-			body {
-				font-family:
-					-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
-					Cantarell, sans-serif;
-				line-height: 1.6;
-				color: var(--text-color);
-				max-width: 800px;
-				margin: 0 auto;
-				padding: 1rem;
-			}
+        .container {
+            max-width: 600px;
+            width: 100%;
+            background: rgba(26, 15, 31, 0.9);
+            border: 2px solid var(--gold);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 0 30px rgba(212, 175, 55, 0.2);
+            text-align: center;
+        }
 
-			header {
-				text-align: center;
-				margin-bottom: 2rem;
-				padding: 1rem 0;
-				border-bottom: 1px solid var(--border-color);
-			}
+        h1 { color: var(--gold); margin-bottom: 10px; }
+        p { margin-bottom: 20px; font-style: italic; }
 
-			h1 {
-				font-size: 1.5rem;
-				color: var(--primary-color);
-			}
+        .form-group { margin-bottom: 15px; text-align: left; }
+        
+        input {
+            width: 100%;
+            padding: 12px;
+            margin-top: 5px;
+            background: #25162b;
+            border: 1px solid var(--gold);
+            color: white;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
 
-			.chat-container {
-				display: flex;
-				flex-direction: column;
-				height: calc(100vh - 200px);
-				min-height: 400px;
-				border: 1px solid var(--border-color);
-				border-radius: 8px;
-				overflow: hidden;
-			}
+        .btn-accion {
+            background: var(--gold);
+            color: black;
+            border: none;
+            padding: 15px 30px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 5px;
+            font-size: 1.1em;
+            transition: transform 0.2s;
+        }
 
-			.chat-messages {
-				flex: 1;
-				overflow-y: auto;
-				padding: 1rem;
-				background-color: var(--light-bg);
-			}
+        .btn-accion:hover { transform: scale(1.05); background: white; }
 
-			.message {
-				margin-bottom: 1rem;
-				padding: 0.75rem;
-				border-radius: 8px;
-				max-width: 80%;
-			}
+        #resultado { display: none; margin-top: 30px; }
+        
+        .carta-revelada {
+            width: 250px;
+            border: 4px solid var(--gold);
+            border-radius: 10px;
+            margin: 20px 0;
+            box-shadow: 0 0 20px var(--gold);
+        }
 
-			.message p {
-				white-space: pre-line;
-				margin: 0;
-				overflow-wrap: anywhere;
-			}
+        #ia-informe {
+            text-align: left;
+            padding: 20px;
+            border-left: 2px solid var(--gold);
+            background: rgba(255, 255, 255, 0.05);
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
 
-			.user-message {
-				background-color: var(--user-msg-bg);
-				align-self: flex-end;
-				margin-left: auto;
-			}
+    <div class="container" id="main-box">
+        <h1>✨ ARCANOS GRADO 33 ✨</h1>
+        
+        <div id="formulario">
+            <p>Bienvenido, buscador de verdades. Para que los astros hablen, primero identifícate ante el oráculo.</p>
+            
+            <div class="form-group">
+                <input type="text" id="nombre" placeholder="TU NOMBRE COMPLETO" required>
+            </div>
+            <div class="form-group">
+                <input type="text" id="whatsapp" placeholder="TU WHATSAPP (Ej: +58...)" required>
+            </div>
+            <div class="form-group">
+                <input type="text" id="ubicacion" placeholder="CIUDAD / PAÍS" required>
+            </div>
 
-			.assistant-message {
-				background-color: var(--assistant-msg-bg);
-				align-self: flex-start;
-			}
+            <p style="font-size: 0.9em;">¿Aceptas que los astros revelen tu camino hoy?</p>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button onclick="realizarConsulta()" class="btn-accion">SÍ, ACEPTO</button>
+                <button onclick="alert('El oráculo esperará tu regreso.')" class="btn-accion" style="background: #444; color: white;">NO</button>
+            </div>
+        </div>
 
-			.message-input {
-				display: flex;
-				padding: 0.75rem;
-				border-top: 1px solid var(--border-color);
-				background-color: white;
-			}
+        <div id="resultado">
+            <h2 id="carta-nombre" style="color: var(--gold);"></h2>
+            <img id="carta-img" class="carta-revelada" src="" alt="Carta Revelada">
+            <div id="ia-informe"></div>
+            <br>
+            <button onclick="window.location.reload()" class="btn-accion">NUEVA CONSULTA</button>
+        </div>
+    </div>
 
-			#user-input {
-				flex: 1;
-				padding: 0.75rem;
-				border: 1px solid var(--border-color);
-				border-radius: 4px;
-				font-family: inherit;
-				resize: none;
-				min-height: 44px;
-			}
-
-			#send-button {
-				margin-left: 0.5rem;
-				padding: 0 1rem;
-				background-color: var(--primary-color);
-				color: white;
-				border: none;
-				border-radius: 4px;
-				cursor: pointer;
-				transition: background-color 0.2s;
-			}
-
-			#send-button:hover {
-				background-color: var(--primary-hover);
-			}
-
-			#send-button:disabled {
-				background-color: var(--text-light);
-				cursor: not-allowed;
-			}
-
-			.typing-indicator {
-				display: none;
-				font-style: italic;
-				color: var(--text-light);
-				padding: 1rem;
-			}
-
-			.typing-indicator.visible {
-				display: block;
-			}
-
-			footer {
-				margin-top: 1rem;
-				text-align: center;
-				font-size: 0.85rem;
-				color: var(--text-light);
-			}
-		</style>
-	</head>
-	<body>
-		<header>
-			<h1>Cloudflare AI Chat</h1>
-			<p>Powered by Cloudflare Workers AI</p>
-		</header>
-
-		<div class="chat-container">
-			<div id="chat-messages" class="chat-messages">
-				<div class="message assistant-message">
-					<p>
-						Hello! I'm an LLM chat app powered by Cloudflare Workers AI. How can
-						I help you today?
-					</p>
-				</div>
-			</div>
-
-			<div class="typing-indicator" id="typing-indicator">
-				AI is thinking...
-			</div>
-
-			<div class="message-input">
-				<textarea
-					id="user-input"
-					placeholder="Type your message here..."
-					rows="1"
-					autofocus
-				></textarea>
-				<button id="send-button">Send</button>
-			</div>
-		</div>
-
-		<footer>
-			<p>Cloudflare Workers AI Chat Template &copy; 2025</p>
-		</footer>
-
-		<!-- Chat app script -->
-		<script src="chat.js"></script>
-	</body>
+    <script src="chat.js"></script>
+</body>
 </html>
