@@ -3,120 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Arcanos Grado 33 - Médium IA</title>
+    <title>Arcanos Grado 33</title>
     <style>
-        :root {
-            --gold: #d4af37;
-            --dark-purple: #1a0f1f;
-            --mystic-white: #e0d7e5;
-        }
-
-        body {
-            background-color: var(--dark-purple);
-            color: var(--mystic-white);
-            font-family: 'Georgia', serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-height: 100vh;
-            margin: 0;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 600px;
-            width: 100%;
-            background: rgba(26, 15, 31, 0.9);
-            border: 2px solid var(--gold);
-            border-radius: 15px;
-            padding: 30px;
-            box-shadow: 0 0 30px rgba(212, 175, 55, 0.2);
-            text-align: center;
-        }
-
-        h1 { color: var(--gold); margin-bottom: 10px; }
-        p { margin-bottom: 20px; font-style: italic; }
-
-        .form-group { margin-bottom: 15px; text-align: left; }
-        
-        input {
-            width: 100%;
-            padding: 12px;
-            margin-top: 5px;
-            background: #25162b;
-            border: 1px solid var(--gold);
-            color: white;
-            border-radius: 5px;
-            box-sizing: border-box;
-        }
-
-        .btn-accion {
-            background: var(--gold);
-            color: black;
-            border: none;
-            padding: 15px 30px;
-            font-weight: bold;
-            cursor: pointer;
-            border-radius: 5px;
-            font-size: 1.1em;
-            transition: transform 0.2s;
-        }
-
-        .btn-accion:hover { transform: scale(1.05); background: white; }
-
-        #resultado { display: none; margin-top: 30px; }
-        
-        .carta-revelada {
-            width: 250px;
-            border: 4px solid var(--gold);
-            border-radius: 10px;
-            margin: 20px 0;
-            box-shadow: 0 0 20px var(--gold);
-        }
-
-        #ia-informe {
-            text-align: left;
-            padding: 20px;
-            border-left: 2px solid var(--gold);
-            background: rgba(255, 255, 255, 0.05);
-            line-height: 1.6;
-        }
+        body { background: #0c0c0c; color: #d4af37; font-family: serif; text-align: center; padding: 20px; }
+        .container { max-width: 450px; margin: auto; border: 2px solid #d4af37; padding: 20px; border-radius: 10px; }
+        input { width: 90%; padding: 10px; margin: 10px 0; background: #1a1a1a; color: white; border: 1px solid #d4af37; }
+        button { background: #d4af37; color: black; padding: 15px 25px; border: none; cursor: pointer; font-weight: bold; width: 100%; }
+        #resultado { display: none; margin-top: 20px; }
+        .carta-img { width: 200px; border: 3px solid #d4af37; margin-bottom: 15px; }
+        .texto-ia { color: white; text-align: left; font-style: italic; }
     </style>
 </head>
 <body>
-
-    <div class="container" id="main-box">
+    <div class="container">
         <h1>✨ ARCANOS GRADO 33 ✨</h1>
         
-        <div id="formulario">
-            <p>Bienvenido, buscador de verdades. Para que los astros hablen, primero identifícate ante el oráculo.</p>
-            
-            <div class="form-group">
-                <input type="text" id="nombre" placeholder="TU NOMBRE COMPLETO" required>
-            </div>
-            <div class="form-group">
-                <input type="text" id="whatsapp" placeholder="TU WHATSAPP (Ej: +58...)" required>
-            </div>
-            <div class="form-group">
-                <input type="text" id="ubicacion" placeholder="CIUDAD / PAÍS" required>
-            </div>
+        <div id="pantalla-carga" style="display:none;">
+            <h3>Consultando al Oráculo...</h3>
+        </div>
 
-            <p style="font-size: 0.9em;">¿Aceptas que los astros revelen tu camino hoy?</p>
-            <div style="display: flex; gap: 10px; justify-content: center;">
-                <button onclick="realizarConsulta()" class="btn-accion">SÍ, ACEPTO</button>
-                <button onclick="alert('El oráculo esperará tu regreso.')" class="btn-accion" style="background: #444; color: white;">NO</button>
-            </div>
+        <div id="formulario">
+            <input type="text" id="nombre" placeholder="Tu Nombre">
+            <input type="text" id="whatsapp" placeholder="WhatsApp">
+            <input type="text" id="ubicacion" placeholder="Tu Ciudad">
+            <button id="btn-consultar">REVELAR DESTINO</button>
         </div>
 
         <div id="resultado">
-            <h2 id="carta-nombre" style="color: var(--gold);"></h2>
-            <img id="carta-img" class="carta-revelada" src="" alt="Carta Revelada">
-            <div id="ia-informe"></div>
+            <h2 id="carta-nombre"></h2>
+            <img id="carta-img" class="carta-img" src="" alt="Carta">
+            <div id="ia-informe" class="texto-ia"></div>
             <br>
-            <button onclick="window.location.reload()" class="btn-accion">NUEVA CONSULTA</button>
+            <button onclick="reiniciar()">NUEVA CONSULTA</button>
         </div>
     </div>
-
     <script src="chat.js"></script>
 </body>
 </html>
