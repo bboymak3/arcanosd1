@@ -2,65 +2,131 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Admin - Arcanos Grado 33</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Admin - Arcanos Grado 33</title>
     <style>
-        body { font-family: sans-serif; background: #111; color: #d4af37; padding: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #222; }
-        th, td { padding: 12px; border: 1px solid #d4af37; text-align: left; color: white; }
-        th { background: #d4af37; color: black; }
-        .btn-wa { background: #25d366; color: white; padding: 5px 10px; text-decoration: none; border-radius: 4px; }
+        :root { --oro: #d4af37; --oscuro: #111; --texto: #eee; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--oscuro); color: var(--texto); padding: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--oro); padding-bottom: 15px; margin-bottom: 20px; }
+        .stats-box { background: #222; padding: 10px 20px; border-radius: 8px; border: 1px solid var(--oro); display: flex; gap: 20px; }
+        .stat { text-align: center; }
+        .stat span { display: block; font-size: 0.8em; color: var(--oro); text-transform: uppercase; }
+        .stat b { font-size: 1.4em; }
+        
+        .controls { margin-bottom: 20px; display: flex; gap: 10px; }
+        input#buscador { flex: 1; padding: 12px; background: #222; border: 1px solid #444; color: white; border-radius: 5px; }
+        
+        table { width: 100%; border-collapse: collapse; background: #1a1a1a; border-radius: 8px; overflow: hidden; }
+        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #333; }
+        th { background: var(--oro); color: black; font-weight: bold; text-transform: uppercase; font-size: 0.85em; }
+        tr:hover { background: #252525; }
+        
+        .carta-tag { color: var(--oro); font-weight: bold; font-family: serif; }
+        .btn-wa { background: #25d366; color: white; padding: 8px 12px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 0.85em; display: inline-block; }
+        .btn-wa:hover { background: #1ebe57; }
+        .fecha { color: #888; font-size: 0.9em; }
     </style>
 </head>
 <body>
-    <h1>📋 Consultantes Registrados</h1>
-    <div id="status">Cargando datos...</div>
-    <table id="tabla" style="display:none;">
+
+    <div class="header">
+        <h1>🔮 Control de Consultantes</h1>
+        <div class="stats-box">
+            <div class="stat"><span id="txt-hoy">Hoy</span><b id="stat-hoy">0</b></div>
+            <div class="stat"><span>Total</span><b id="stat-total">0</b></div>
+        </div>
+    </div>
+
+    <div class="controls">
+        <input type="text" id="buscador" placeholder="Buscar por nombre o WhatsApp (Ej: +58...)" onkeyup="filtrar()">
+    </div>
+
+    <table id="tabla-admin">
         <thead>
             <tr>
-                <th>ID</th>
-                <th>Nombre</th>
-                <th>WhatsApp</th>
+                <th>Fecha/Hora</th>
+                <th>Nombre del Consultante</th>
+                <th>Carta Revelada</th>
                 <th>Ubicación</th>
+                <th>WhatsApp</th>
                 <th>Acción</th>
             </tr>
         </thead>
-        <tbody id="lista"></tbody>
+        <tbody id="lista-usuarios">
+            </tbody>
     </table>
 
     <script>
-        async function cargar() {
+        let datosOriginales = [];
+
+        async function cargarPanel() {
             const params = new URLSearchParams(window.location.search);
             const token = params.get("token");
 
-            if (!token) {
-                document.getElementById('status').innerText = "Acceso denegado. Se requiere ?token=...";
+            if (token !== "grado33") {
+                document.body.innerHTML = "<h1 style='text-align:center; margin-top:100px;'>⚠️ Acceso No Autorizado</h1>";
                 return;
             }
 
             try {
-                const res = await fetch(`/api/admin/usuarios?token=${token}`);
-                const datos = await res.json();
+                // El endpoint que configuramos en el Worker con el JOIN
+                const respuesta = await fetch(`/api/admin/usuarios?token=${token}`);
+                const datos = await respuesta.json();
                 
-                const lista = document.getElementById('lista');
-                lista.innerHTML = datos.map(u => `
-                    <tr>
-                        <td>${u.id}</td>
-                        <td>${u.nombre}</td>
-                        <td>${u.whatsapp}</td>
-                        <td>${u.ubicacion}</td>
-                        <td>
-                            <a href="https://wa.me/${u.whatsapp.replace(/\D/g,'')}" target="_blank" class="btn-wa">WhatsApp</a>
-                        </td>
-                    </tr>
-                `).join('');
+                datosOriginales = datos;
+
+                // Calcular estadísticas rápidas
+                const hoy = new Date().toISOString().split('T')[0];
+                const consultasHoy = datos.filter(u => u.fecha_registro.includes(hoy)).length;
                 
-                document.getElementById('status').style.display = 'none';
-                document.getElementById('tabla').style.display = 'table';
-            } catch (e) {
-                document.getElementById('status').innerText = "Error al cargar usuarios.";
+                document.getElementById('stat-hoy').innerText = consultasHoy;
+                document.getElementById('stat-total').innerText = datos.length;
+
+                renderizarTabla(datos);
+
+            } catch (error) {
+                console.error("Error al cargar:", error);
+                alert("No se pudo conectar con la base de datos.");
             }
         }
-        cargar();
+
+        function renderizarTabla(lista) {
+            const tabla = document.getElementById('lista-usuarios');
+            tabla.innerHTML = "";
+
+            lista.forEach(u => {
+                const fila = document.createElement('tr');
+                // Limpiamos el número para el link de WhatsApp
+                const waLink = u.whatsapp.replace(/\D/g, ''); 
+
+                fila.innerHTML = `
+                    <td class="fecha">${u.fecha_registro}</td>
+                    <td><b>${u.nombre}</b></td>
+                    <td class="carta-tag">✨ ${u.carta || 'Desconocida'}</td>
+                    <td>${u.ubicacion || 'N/A'}</td>
+                    <td>${u.whatsapp}</td>
+                    <td>
+                        <a href="https://wa.me/${waLink}?text=Hola%20${encodeURIComponent(u.nombre)},%20vi%20tu%20consulta%20en%20Arcanos%20Grado%2033.%20Te%20salió%20la%20carta%20de%20${encodeURIComponent(u.carta)}..." 
+                           target="_blank" class="btn-wa">
+                           ABRIR CHAT 📱
+                        </a>
+                    </td>
+                `;
+                tabla.appendChild(fila);
+            });
+        }
+
+        function filtrar() {
+            const busqueda = document.getElementById('buscador').value.toLowerCase();
+            const filtrados = datosOriginales.filter(u => 
+                u.nombre.toLowerCase().includes(busqueda) || 
+                u.whatsapp.includes(busqueda)
+            );
+            renderizarTabla(filtrados);
+        }
+
+        // Iniciar carga
+        window.onload = cargarPanel;
     </script>
 </body>
 </html>
