@@ -1,16 +1,27 @@
+// Configuración del Selector de Banderas
+const inputWA = document.querySelector("#whatsapp");
+const iti = window.intlTelInput(inputWA, {
+    initialCountry: "auto",
+    geoIpLookup: function(callback) {
+        fetch('https://ipinfo.io/json')
+            .then(res => res.json())
+            .then(data => callback(data.country))
+            .catch(() => callback("VE")); // Por defecto Venezuela
+    },
+    utilsScript: "https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/utils.js",
+});
+
 document.getElementById('btn-consultar').addEventListener('click', async () => {
     const nombre = document.getElementById('nombre').value;
-    const whatsapp = document.getElementById('whatsapp').value;
+    const whatsapp = iti.getNumber(); // Captura número con código (+58...)
     const ubicacion = document.getElementById('ubicacion').value;
 
-    if (!nombre || !whatsapp) {
-        alert("Faltan datos");
+    if (!nombre || !iti.isValidNumber()) {
+        alert("Por favor, ingresa tu nombre y un número de WhatsApp válido.");
         return;
     }
 
-    // 1. Mostrar carga y ocultar formulario
-    document.getElementById('formulario').style.display = 'none';
-    document.getElementById('pantalla-carga').style.display = 'block';
+    document.getElementById('formulario').innerHTML = "<p>Consultando al Oráculo Espiritual...</p>";
 
     try {
         const respuesta = await fetch('/api/consultar', {
@@ -21,28 +32,27 @@ document.getElementById('btn-consultar').addEventListener('click', async () => {
 
         const data = await respuesta.json();
 
-        if (data.error) throw new Error(data.error);
-
-        // 2. Mostrar resultado
-        document.getElementById('pantalla-carga').style.display = 'none';
+        document.getElementById('formulario').style.display = 'none';
         document.getElementById('resultado').style.display = 'block';
         
         document.getElementById('carta-nombre').innerText = data.nombreCarta;
         document.getElementById('carta-img').src = data.imagen;
-        document.getElementById('ia-informe').innerText = data.informe;
+        
+        // Efecto de máquina de escribir
+        let i = 0;
+        const informeDiv = document.getElementById('ia-informe');
+        informeDiv.innerHTML = "";
+        function escribir() {
+            if (i < data.informe.length) {
+                informeDiv.innerHTML += data.informe.charAt(i);
+                i++;
+                setTimeout(escribir, 25);
+            }
+        }
+        escribir();
 
     } catch (err) {
-        alert("Error: " + err.message);
-        reiniciar();
+        alert("Error en la conexión espiritual.");
+        location.reload();
     }
 });
-
-function reiniciar() {
-    // Limpiar campos y volver al estado inicial
-    document.getElementById('resultado').style.display = 'none';
-    document.getElementById('pantalla-carga').style.display = 'none';
-    document.getElementById('formulario').style.display = 'block';
-    document.getElementById('nombre').value = '';
-    document.getElementById('whatsapp').value = '';
-    document.getElementById('ubicacion').value = '';
-}
