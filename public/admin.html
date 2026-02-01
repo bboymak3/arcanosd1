@@ -1,0 +1,29 @@
+<thead>
+    <tr>
+        <th>Fecha</th>
+        <th>Nombre</th>
+        <th>Carta Revelada</th> <th>Ubicación</th>
+        <th>WhatsApp</th>
+        <th>Acción</th>
+    </tr>
+</thead>
+<tbody id="lista"></tbody>
+
+<script>
+// En la función cargarUsuarios, actualiza el mapa:
+lista.innerHTML = datos.map(u => `
+    <tr>
+        <td>${u.fecha_registro}</td>
+        <td>${u.nombre}</td>
+        <td style="font-weight:bold; color:#d4af37">${u.carta_revelada || 'N/A'}</td>
+        <td>${u.ubicacion}</td>
+        <td>${u.whatsapp}</td>
+        <td>
+            <a href="https://wa.me/${u.whatsapp.replace(/\D/g,'')}?text=Hola ${u.nombre}, soy el médium de Arcanos Grado 33. Veo que te salió la carta de ${u.carta_revelada}..." 
+               target="_blank" class="btn-wa">
+               MENSAJE 📱
+            </a>
+        </td>
+    </tr>
+`).join('');
+</script>
