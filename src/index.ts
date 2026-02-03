@@ -1,7 +1,7 @@
 export interface Env {
   AI: any;
   DB: D1Database;
-  IMG_BUCKET: KVNamespace; // Debes crear este binding en el panel de Cloudflare
+  IMG_BUCKET: KVNamespace;
 }
 
 export default {
@@ -15,70 +15,66 @@ export default {
 
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-    // --- NUEVA FUNCIÓN: SERVIDOR DE IMÁGENES DESDE KV ---
+    // --- 1. SERVIDOR DE IMÁGENES (Desde KV) ---
     if (url.pathname.startsWith("/images/")) {
+      const imageName = url.pathname.split("/").pop();
+      if (!imageName) return new Response("Not Found", { status: 404 });
+      
+      const image = await env.IMG_BUCKET.get(imageName, { type: "arrayBuffer" });
+      if (!image) return new Response("Imagen no encontrada", { status: 404 });
+
+      return new Response(image, {
+        headers: { "Content-Type": "image/png", ...corsHeaders }
+      });
+    }
+
+    // --- 2. API DE CONSULTA (Para los clientes) ---
+    if (url.pathname === "/api/consultar" && request.method === "POST") {
       try {
-        // Extraemos el nombre del archivo (ej: E12.png)
-        const imageName = url.pathname.split("/").pop();
-        if (!imageName) return new Response("Nombre de imagen no válido", { status: 400 });
+        const { nombre, whatsapp, ubicacion } = await request.json();
+        
+        // Selección aleatoria de 78 cartas
+        const indice = Math.floor(Math.random() * 78) + 1;
+        let cardId = (indice <= 22) ? indice.toString().padStart(2, '0') : 
+                     (indice <= 36) ? 'B' + (indice - 22).toString().padStart(2, '0') :
+                     (indice <= 50) ? 'C' + (indice - 36).toString().padStart(2, '0') :
+                     (indice <= 64) ? 'E' + (indice - 50).toString().padStart(2, '0') :
+                                      'O' + (indice - 64).toString().padStart(2, '0');
 
-        // Buscamos la imagen en el KV
-        const image = await env.IMG_BUCKET.get(imageName, { type: "arrayBuffer" });
+        const carta = await env.DB.prepare("SELECT * FROM arcanos WHERE id = ?").bind(cardId).first();
 
-        if (!image) {
-          return new Response("Imagen no encontrada en el Oráculo", { status: 404, headers: corsHeaders });
-        }
+        // Registrar usuario y obtener ID
+        const user = await env.DB.prepare(
+          "INSERT INTO usuarios (nombre, whatsapp, ubicacion) VALUES (?, ?, ?) RETURNING id"
+        ).bind(nombre, whatsapp, ubicacion).first();
 
-        // Devolvemos la imagen con el tipo de contenido correcto
-        return new Response(image, {
-          headers: {
-            "Content-Type": "image/png",
-            "Cache-Control": "public, max-age=604800", // Cache por 1 semana
-            ...corsHeaders
-          }
+        // Generar lectura con IA
+        const aiResponse = await env.AI.run("@cf/meta/llama-3-8b-instruct", {
+          messages: [
+            { role: "system", content: "Eres un médium experto del Tarot Grado 33. Proporciona lecturas profundas y espirituales." },
+            { role: "user", content: `Lectura para ${nombre} sobre la carta ${carta.nombre}.` }
+          ]
         });
-      } catch (e) {
-        return new Response("Error al recuperar imagen", { status: 500 });
+
+        // Registrar la lectura en el historial
+        await env.DB.prepare(
+          "INSERT INTO lecturas (usuario_id, arcano_id, mensaje_ia) VALUES (?, ?, ?)"
+        ).bind(user.id, cardId, aiResponse.response).run();
+
+        return new Response(JSON.stringify({
+          nombreCarta: carta.nombre,
+          imagen: `https://${url.hostname}/images/${carta.nombre_archivo}`,
+          informe: aiResponse.response
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
       }
     }
 
-    // --- API DE CONSULTA ---
-    if (url.pathname === "/api/consultar" && request.method === "POST") {
-      const { nombre, whatsapp, ubicacion } = await request.json();
-      const indice = Math.floor(Math.random() * 78) + 1;
-      
-      let cardId = (indice <= 22) ? indice.toString().padStart(2, '0') : 
-                   (indice <= 36) ? 'B' + (indice - 22).toString().padStart(2, '0') :
-                   (indice <= 50) ? 'C' + (indice - 36).toString().padStart(2, '0') :
-                   (indice <= 64) ? 'E' + (indice - 50).toString().padStart(2, '0') :
-                                    'O' + (indice - 64).toString().padStart(2, '0');
-
-      const carta = await env.DB.prepare("SELECT * FROM arcanos WHERE id = ?").bind(cardId).first();
-
-      const user = await env.DB.prepare(
-        "INSERT INTO usuarios (nombre, whatsapp, ubicacion) VALUES (?, ?, ?) RETURNING id"
-      ).bind(nombre, whatsapp, ubicacion).first();
-
-      const aiResponse = await env.AI.run("@cf/meta/llama-3-8b-instruct", {
-        messages: [{ role: "system", content: "Eres un médium Grado 33." }, 
-                   { role: "user", content: `Lectura para ${nombre} sobre ${carta.nombre}` }]
-      });
-
-      await env.DB.prepare(
-        "INSERT INTO lecturas (usuario_id, arcano_id, mensaje_ia) VALUES (?, ?, ?)"
-      ).bind(user.id, cardId, aiResponse.response).run();
-
-      return new Response(JSON.stringify({
-        nombreCarta: carta.nombre,
-        // Apuntamos al propio Worker para que la nueva función de arriba sirva la imagen
-        imagen: `https://${url.hostname}/images/${carta.nombre_archivo}`,
-        informe: aiResponse.response
-      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    // --- API ADMIN PROFESIONAL (CON HISTORIAL) ---
+    // --- 3. API ADMIN (Historial Completo) ---
     if (url.pathname === "/api/admin/usuarios") {
-      if (url.searchParams.get("token") !== "grado33") return new Response("Error", { status: 401 });
+      if (url.searchParams.get("token") !== "grado33") return new Response("No autorizado", { status: 401 });
 
       const query = `
         SELECT u.id, u.nombre, u.whatsapp, u.ubicacion, u.fecha_registro, a.nombre as carta
