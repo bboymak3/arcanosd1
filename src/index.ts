@@ -1,6 +1,7 @@
 export interface Env {
   AI: any;
   DB: D1Database;
+  IMG_BUCKET: KVNamespace; // Debes crear este binding en el panel de Cloudflare
 }
 
 export default {
@@ -14,12 +15,38 @@ export default {
 
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+    // --- NUEVA FUNCIÓN: SERVIDOR DE IMÁGENES DESDE KV ---
+    if (url.pathname.startsWith("/images/")) {
+      try {
+        // Extraemos el nombre del archivo (ej: E12.png)
+        const imageName = url.pathname.split("/").pop();
+        if (!imageName) return new Response("Nombre de imagen no válido", { status: 400 });
+
+        // Buscamos la imagen en el KV
+        const image = await env.IMG_BUCKET.get(imageName, { type: "arrayBuffer" });
+
+        if (!image) {
+          return new Response("Imagen no encontrada en el Oráculo", { status: 404, headers: corsHeaders });
+        }
+
+        // Devolvemos la imagen con el tipo de contenido correcto
+        return new Response(image, {
+          headers: {
+            "Content-Type": "image/png",
+            "Cache-Control": "public, max-age=604800", // Cache por 1 semana
+            ...corsHeaders
+          }
+        });
+      } catch (e) {
+        return new Response("Error al recuperar imagen", { status: 500 });
+      }
+    }
+
     // --- API DE CONSULTA ---
     if (url.pathname === "/api/consultar" && request.method === "POST") {
       const { nombre, whatsapp, ubicacion } = await request.json();
       const indice = Math.floor(Math.random() * 78) + 1;
       
-      // Lógica de IDs (01-78, B, C, E, O)
       let cardId = (indice <= 22) ? indice.toString().padStart(2, '0') : 
                    (indice <= 36) ? 'B' + (indice - 22).toString().padStart(2, '0') :
                    (indice <= 50) ? 'C' + (indice - 36).toString().padStart(2, '0') :
@@ -43,7 +70,8 @@ export default {
 
       return new Response(JSON.stringify({
         nombreCarta: carta.nombre,
-        imagen: `https://arcanosd1.estilosgrado33.workers.dev/images/${carta.nombre_archivo}`,
+        // Apuntamos al propio Worker para que la nueva función de arriba sirva la imagen
+        imagen: `https://${url.hostname}/images/${carta.nombre_archivo}`,
         informe: aiResponse.response
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -52,7 +80,6 @@ export default {
     if (url.pathname === "/api/admin/usuarios") {
       if (url.searchParams.get("token") !== "grado33") return new Response("Error", { status: 401 });
 
-      // Consultamos uniendo las tablas para ver la carta de cada usuario
       const query = `
         SELECT u.id, u.nombre, u.whatsapp, u.ubicacion, u.fecha_registro, a.nombre as carta
         FROM usuarios u

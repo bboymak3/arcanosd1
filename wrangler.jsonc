@@ -1,22 +1,30 @@
-/**
- * For more details on how to configure Wrangler, refer to:
- * https://developers.cloudflare.com/workers/wrangler/configuration/
- */
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "arcanosd1",
 	"main": "src/index.ts",
 	"compatibility_date": "2025-10-08",
-	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+	"compatibility_flags": ["nodejs_compat"],
+	"kv_namespaces": [
+		{
+			"binding": "IMG_BUCKET",
+			"id": "1845c2e73efa481fb019aea6e8bc30cc"
+		}
+	],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "arcanos-db",
+			"database_id": "648d1ac6-4774-466f-ac41-43ffde9d51fe"
+		}
+	],
+	"ai": {
+		"binding": "AI"
+	},
 	"assets": {
 		"binding": "ASSETS",
 		"directory": "./public"
 	},
 	"observability": {
 		"enabled": true
-	},
-	"ai": {
-		"binding": "AI"
-	},
-	"upload_source_maps": true
+	}
 }
