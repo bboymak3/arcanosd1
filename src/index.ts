@@ -1,116 +1,138 @@
-import { Ai } from '@cloudflare/ai';
-
 export interface Env {
   AI: any;
   DB: D1Database;
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: export default {
+  async fetch(request: Request, env: any): Promise<Response> {
     const url = new URL(request.url);
 
-    // 1. Si la ruta es /api/chat, manejamos la IA
-    if (url.pathname === '/api/chat' && request.method === 'POST') {
-      const { messages } = await request.json();
-      const lastMsg = messages[messages.length - 1].content.toLowerCase();
+    // 1. Manejo de CORS (Muy importante para evitar el Failed to Fetch)
+    const corsHeaders = {
+      "Access-Control-Allow-Origin": "*", // O el dominio de tu página de Pages
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    };
 
-      // Consulta a D1
-      const { results } = await env.DB.prepare(
-        "SELECT * FROM menu_items WHERE nombre LIKE ? OR categoria LIKE ?"
-      ).bind(`%${lastMsg}%`, `%${lastMsg}%`).all();
-
-      const ai = new Ai(env.AI);
-      const systemPrompt = `Eres el mesero de "La Cachamita de Oro" en Barinas. 
-      Habla como llanero (Epa, camarita, ¡claro que sí!). 
-      Si el usuario saluda, ofrece Desayunos o Almuerzos. 
-      Si recomiendas algo, usa el formato: **Nombre** - Precio. 
-      E incluye la foto: ![foto](https://cachamito.estilosgrado33.workers.dev/fotos/ID.png)
-      Menú: ${JSON.stringify(results)}`;
-
-      const response = await ai.run('@cf/meta/llama-3-8b-instruct', {
-        messages: [{ role: 'system', content: systemPrompt }, ...messages],
-        stream: true,
-      });
-
-      return new Response(response, { headers: { 'Content-Type': 'text/event-stream' } });
+    // Responder a la petición de verificación del navegador
+    if (request.method === "OPTIONS") {
+      return new Response(null, { headers: corsHeaders });
     }
 
-    // 2. Si es cualquier otra ruta, servimos el HTML del Chat
-    return new Response(html, {
-      headers: { 'Content-Type': 'text/html;charset=UTF-8' },
-    });
-  },
-};
+    // 2. Ruta de la consulta
+    if (url.pathname === "/api/consultar" && request.method === "POST") {
+      try {
+        const { nombre, whatsapp, ubicacion } = await request.json();
 
-// El HTML embebido para que el Worker lo entregue directamente
-const html = `
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>La Cachamita de Oro</title>
-    <style>
-        body { font-family: sans-serif; margin: 0; background: #f0f2f5; display: flex; flex-direction: column; height: 100vh; }
-        header { background: #2e7d32; color: white; padding: 15px; text-align: center; font-size: 1.2em; border-bottom: 4px solid #ffd600; }
-        #chat { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
-        .msg { padding: 10px; border-radius: 10px; max-width: 80%; line-height: 1.4; }
-        .user { align-self: flex-end; background: #2e7d32; color: white; }
-        .bot { align-self: flex-start; background: white; border: 1px solid #ddd; }
-        .bot img { width: 100%; border-radius: 8px; margin-top: 5px; }
-        #form { display: flex; padding: 10px; background: white; border-top: 1px solid #ddd; }
-        input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 5px; outline: none; }
-        button { background: #2e7d32; color: white; border: none; padding: 10px 20px; margin-left: 5px; border-radius: 5px; cursor: pointer; }
-    </style>
-</head>
-<body>
-    <header>🐟 La Cachamita de Oro - Mesero Virtual</header>
-    <div id="chat">
-        <div class="msg bot">¡Epa camarita! Bienvenido. ¿Qué le provoca hoy? ¿Le enseño los <b>Desayunos</b> o nuestros <b>Almuerzos Criollos</b>?</div>
-    </div>
-    <form id="form">
-        <input type="text" id="input" placeholder="Pregunta por un plato..." required>
-        <button type="submit">Enviar</button>
-    </form>
-    <script>
-        const form = document.getElementById('form');
-        const chat = document.getElementById('chat');
-        const history = [];
+        // Lógica de selección de carta (01-78)
+        const randomNum = Math.floor(Math.random() * 78) + 1;
+        let cardId = randomNum.toString().padStart(2, '0'); 
+        // ... (Tu lógica de IDs B, C, E, O)
 
-        form.onsubmit = async (e) => {
-            e.preventDefault();
-            const text = document.getElementById('input').value;
-            document.getElementById('input').value = '';
-            
-            chat.innerHTML += '<div class="msg user">' + text + '</div>';
-            history.push({ role: "user", content: text });
-            chat.scrollTop = chat.scrollHeight;
+        // Consulta a D1
+        const carta = await env.DB.prepare("SELECT * FROM arcanos WHERE id = ?").bind(cardId).first();
 
-            const res = await fetch('/api/chat', {
-                method: 'POST',
-                body: JSON.stringify({ messages: history })
-            });
+        // Generar respuesta con IA
+        const aiResponse = await env.AI.run("@cf/meta/llama-3-8b-instruct", {
+          messages: [
+            { role: "system", content: "Eres un médium experto en Tarot Grado 33." },
+            { role: "user", content: `Haz una lectura para ${nombre} sobre la carta ${carta.nombre}` }
+          ]
+        });
 
-            const botDiv = document.createElement('div');
-            botDiv.className = 'msg bot';
-            chat.appendChild(botDiv);
-
-            const reader = res.body.getReader();
-            const decoder = new TextDecoder();
-            let fullText = "";
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                const chunk = decoder.decode(value);
-                fullText += chunk;
-                // Simple reemplazo de markdown para imágenes
-                botDiv.innerHTML = fullText.replace(/!\\[foto\\]\\((.*?)\\)/g, '<img src="$1">').replace(/\\n/g, '<br>');
-                chat.scrollTop = chat.scrollHeight;
-            }
-            history.push({ role: "assistant", content: fullText });
+        const respuestaFinal = {
+          nombreCarta: carta.nombre,
+          imagen: `https://arcanosd1.estilosgrado33.workers.dev/images/${carta.nombre_archivo}`,
+          informe: aiResponse.response
         };
-    </script>
-</body>
-</html>
-`;
+
+        return new Response(JSON.stringify(respuestaFinal), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: corsHeaders
+        });
+      }
+    }
+
+    return new Response("No encontrado", { status: 404 });
+  }
+};
+, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+
+    // Endpoint para la consulta
+    if (url.pathname === "/api/consultar" && request.method === "POST") {
+      try {
+        const { nombre, whatsapp, ubicacion } = await request.json();
+
+        // 1. Lógica para elegir 1 de las 78 cartas
+        const totalCartas = 78;
+        const indiceAleatorio = Math.floor(Math.random() * totalCartas) + 1;
+        let cardId: string;
+
+        if (indiceAleatorio <= 22) {
+          cardId = indiceAleatorio.toString().padStart(2, '0'); // Mayores (01-22)
+        } else if (indiceAleatorio <= 36) {
+          cardId = 'B' + (indiceAleatorio - 22).toString().padStart(2, '0'); // Bastos (B01-B14)
+        } else if (indiceAleatorio <= 50) {
+          cardId = 'C' + (indiceAleatorio - 36).toString().padStart(2, '0'); // Copas (C01-C14)
+        } else if (indiceAleatorio <= 64) {
+          cardId = 'E' + (indiceAleatorio - 50).toString().padStart(2, '0'); // Espadas (E01-E14)
+        } else {
+          cardId = 'O' + (indiceAleatorio - 64).toString().padStart(2, '0'); // Oros (O01-O14)
+        }
+
+        // 2. Buscar la carta en la base de datos D1
+        const carta = await env.DB.prepare("SELECT * FROM arcanos WHERE id = ?").bind(cardId).first();
+        
+        if (!carta) {
+          return new Response("Error: Carta no encontrada", { status: 404 });
+        }
+
+        // 3. Guardar al usuario en la tabla 'usuarios'
+        const userInsert = await env.DB.prepare(
+          "INSERT INTO usuarios (nombre, whatsapp, ubicacion) VALUES (?, ?, ?) RETURNING id"
+        ).bind(nombre, whatsapp, ubicacion).first();
+
+        // 4. Generar el informe con la IA (Llama 3)
+        const promptMistico = `
+          Actúa como un Gran Médium del Tarot Grado 33. 
+          El consultante se llama ${nombre} y está en ${ubicacion}.
+          Ha salido la carta: "${carta.nombre}".
+          Significado clave: ${carta.palabras_clave}.
+          Esencia mística: ${carta.descripcion_mistica}.
+          Genera una lectura espiritual profunda, directa y reveladora sobre su presente y futuro.
+        `;
+
+        const aiResponse = await env.AI.run("@cf/meta/llama-3-8b-instruct", {
+          messages: [
+            { role: "system", content: "Eres un experto místico del Tarot Grado 33." },
+            { role: "user", content: promptMistico }
+          ]
+        });
+
+        // 5. Registrar la lectura
+        await env.DB.prepare(
+          "INSERT INTO lecturas (usuario_id, arcano_id, mensaje_ia) VALUES (?, ?, ?)"
+        ).bind(userInsert.id, cardId, aiResponse.response).run();
+
+        // Enviar respuesta al Front-end
+        return new Response(JSON.stringify({
+          nombreCarta: carta.nombre,
+          imagen: `/images/${carta.nombre_archivo}`,
+          informe: aiResponse.response
+        }), { headers: { "Content-Type": "application/json" } });
+
+      } catch (err) {
+        return new Response("Error en el servidor: " + err.message, { status: 500 });
+      }
+    }
+
+    return new Response("Ruta no encontrada", { status: 404 });
+  }
+};
