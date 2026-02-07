@@ -1,18 +1,32 @@
 {
-  "name": "cachamito-chat",
+  "name": "arcanosd1",
   "main": "src/index.ts",
-  "compatibility_date": "2024-01-01",
+  "compatibility_date": "2026-02-03",
   "compatibility_flags": [
     "nodejs_compat"
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "arcanos_db",
+      "database_id": "648d1ac6-4774-466f-ac41-43ffde9d51fe"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "KV",
+      "id": "1845c2e73efa481fb019aea6e8bc30cc"
+    }
   ],
   "ai": {
     "binding": "AI"
   },
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "db_cachamita",
-      "database_id": "2dd5c21c-b152-424d-ad4a-ba9c7ca1b9e3"
-    }
-  ]
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
 }
