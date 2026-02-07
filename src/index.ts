@@ -1,76 +1,51 @@
 export interface Env {
   AI: any;
   DB: D1Database;
+  KV: KVNamespace;
+  ASSETS: Fetcher;
 }
 
 export default {
-  async fetch(request: export default {
-  async fetch(request: Request, env: any): Promise<Response> {
+  async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
-    // 1. Manejo de CORS (Muy importante para evitar el Failed to Fetch)
+    // 1. Configuración de CORS
+    // Esto permite que tu web en Cloudflare Pages hable con este Worker
     const corsHeaders = {
-      "Access-Control-Allow-Origin": "*", // O el dominio de tu página de Pages
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Origin": "https://amarresde.pages.dev",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type",
     };
 
-    // Responder a la petición de verificación del navegador
+    // Responder a peticiones de verificación del navegador
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders });
     }
 
-    // 2. Ruta de la consulta
-    if (url.pathname === "/api/consultar" && request.method === "POST") {
-      try {
-        const { nombre, whatsapp, ubicacion } = await request.json();
-
-        // Lógica de selección de carta (01-78)
-        const randomNum = Math.floor(Math.random() * 78) + 1;
-        let cardId = randomNum.toString().padStart(2, '0'); 
-        // ... (Tu lógica de IDs B, C, E, O)
-
-        // Consulta a D1
-        const carta = await env.DB.prepare("SELECT * FROM arcanos WHERE id = ?").bind(cardId).first();
-
-        // Generar respuesta con IA
-        const aiResponse = await env.AI.run("@cf/meta/llama-3-8b-instruct", {
-          messages: [
-            { role: "system", content: "Eres un médium experto en Tarot Grado 33." },
-            { role: "user", content: `Haz una lectura para ${nombre} sobre la carta ${carta.nombre}` }
-          ]
-        });
-
-        const respuestaFinal = {
-          nombreCarta: carta.nombre,
-          imagen: `https://arcanosd1.estilosgrado33.workers.dev/images/${carta.nombre_archivo}`,
-          informe: aiResponse.response
-        };
-
-        return new Response(JSON.stringify(respuestaFinal), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        });
-
-      } catch (err) {
-        return new Response(JSON.stringify({ error: err.message }), {
-          status: 500,
-          headers: corsHeaders
-        });
-      }
+    // 2. Servir la web (chatbot.html, etc.) desde /public
+    if (url.pathname === "/" || url.pathname.endsWith(".html") || url.pathname.endsWith(".js") || url.pathname.endsWith(".css")) {
+      return await env.ASSETS.fetch(request);
     }
 
-    return new Response("No encontrado", { status: 404 });
-  }
-};
-, env: Env): Promise<Response> {
-    const url = new URL(request.url);
+    // 3. Servir imágenes directamente desde el KV
+    if (url.pathname.startsWith("/images/")) {
+      const imageName = url.pathname.split("/").pop();
+      if (!imageName) return new Response("No encontrado", { status: 404 });
+      
+      const image = await env.KV.get(imageName, { type: "arrayBuffer" });
+      if (!image) return new Response("Imagen no encontrada", { status: 404 });
 
-    // Endpoint para la consulta
+      return new Response(image, {
+        headers: { "Content-Type": "image/png", ...corsHeaders }
+      });
+    }
+
+    // 4. API de Consulta Espiritual (Lógica del Tarot)
     if (url.pathname === "/api/consultar" && request.method === "POST") {
       try {
         const { nombre, whatsapp, ubicacion } = await request.json();
 
-        // 1. Lógica para elegir 1 de las 78 cartas
+        // --- Lógica de selección de las 78 cartas ---
         const totalCartas = 78;
         const indiceAleatorio = Math.floor(Math.random() * totalCartas) + 1;
         let cardId: string;
@@ -78,61 +53,61 @@ export default {
         if (indiceAleatorio <= 22) {
           cardId = indiceAleatorio.toString().padStart(2, '0'); // Mayores (01-22)
         } else if (indiceAleatorio <= 36) {
-          cardId = 'B' + (indiceAleatorio - 22).toString().padStart(2, '0'); // Bastos (B01-B14)
+          cardId = 'B' + (indiceAleatorio - 22).toString().padStart(2, '0'); // Bastos
         } else if (indiceAleatorio <= 50) {
-          cardId = 'C' + (indiceAleatorio - 36).toString().padStart(2, '0'); // Copas (C01-C14)
+          cardId = 'C' + (indiceAleatorio - 36).toString().padStart(2, '0'); // Copas
         } else if (indiceAleatorio <= 64) {
-          cardId = 'E' + (indiceAleatorio - 50).toString().padStart(2, '0'); // Espadas (E01-E14)
+          cardId = 'E' + (indiceAleatorio - 50).toString().padStart(2, '0'); // Espadas
         } else {
-          cardId = 'O' + (indiceAleatorio - 64).toString().padStart(2, '0'); // Oros (O01-O14)
+          cardId = 'O' + (indiceAleatorio - 64).toString().padStart(2, '0'); // Oros
         }
 
-        // 2. Buscar la carta en la base de datos D1
+        // --- Consulta a la Base de Datos D1 ---
         const carta = await env.DB.prepare("SELECT * FROM arcanos WHERE id = ?").bind(cardId).first();
         
         if (!carta) {
-          return new Response("Error: Carta no encontrada", { status: 404 });
+          return new Response(JSON.stringify({ error: "Carta no encontrada en el mazo sagrado" }), { status: 404, headers: corsHeaders });
         }
 
-        // 3. Guardar al usuario en la tabla 'usuarios'
-        const userInsert = await env.DB.prepare(
+        // --- Guardar usuario y obtener ID ---
+        const userInsert: any = await env.DB.prepare(
           "INSERT INTO usuarios (nombre, whatsapp, ubicacion) VALUES (?, ?, ?) RETURNING id"
         ).bind(nombre, whatsapp, ubicacion).first();
 
-        // 4. Generar el informe con la IA (Llama 3)
-        const promptMistico = `
-          Actúa como un Gran Médium del Tarot Grado 33. 
-          El consultante se llama ${nombre} y está en ${ubicacion}.
-          Ha salido la carta: "${carta.nombre}".
-          Significado clave: ${carta.palabras_clave}.
-          Esencia mística: ${carta.descripcion_mistica}.
-          Genera una lectura espiritual profunda, directa y reveladora sobre su presente y futuro.
-        `;
-
+        // --- Generar respuesta con la IA (Médium Grado 33) ---
         const aiResponse = await env.AI.run("@cf/meta/llama-3-8b-instruct", {
           messages: [
-            { role: "system", content: "Eres un experto místico del Tarot Grado 33." },
-            { role: "user", content: promptMistico }
+            { 
+              role: "system", 
+              content: "Eres un Gran Médium del Tarot Grado 33. Das consejos profundos, espirituales y directos. No menciones que eres una IA." 
+            },
+            { 
+              role: "user", 
+              content: `El consultante es ${nombre} de ${ubicacion}. Ha salido la carta "${carta.nombre}". Significado: ${carta.palabras_clave}. Haz su lectura.` 
+            }
           ]
         });
 
-        // 5. Registrar la lectura
+        // --- Registrar la lectura en la DB ---
         await env.DB.prepare(
           "INSERT INTO lecturas (usuario_id, arcano_id, mensaje_ia) VALUES (?, ?, ?)"
         ).bind(userInsert.id, cardId, aiResponse.response).run();
 
-        // Enviar respuesta al Front-end
+        // --- Enviar respuesta al Front-end ---
         return new Response(JSON.stringify({
           nombreCarta: carta.nombre,
-          imagen: `/images/${carta.nombre_archivo}`,
+          imagen: `https://${url.hostname}/images/${carta.nombre_archivo}`,
           informe: aiResponse.response
-        }), { headers: { "Content-Type": "application/json" } });
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-      } catch (err) {
-        return new Response("Error en el servidor: " + err.message, { status: 500 });
+      } catch (err: any) {
+        return new Response(JSON.stringify({ error: "Error espiritual: " + err.message }), { 
+          status: 500, 
+          headers: corsHeaders 
+        });
       }
     }
 
-    return new Response("Ruta no encontrada", { status: 404 });
+    return new Response("Portal no encontrado", { status: 404 });
   }
 };
